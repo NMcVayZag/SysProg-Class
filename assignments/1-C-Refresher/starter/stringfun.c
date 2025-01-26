@@ -13,6 +13,8 @@ int  setup_buff(char *, char *, int);
 
 //prototypes for functions to handle required functionality
 int  count_words(char *, int);
+void word_print(char *, int);
+void reverse_string(char *, int);
 //add additional prototypes here
 void word_print(char *buff, int str_len){
     char *buff_ptr = buff;  // Pointer to the first character of the string
