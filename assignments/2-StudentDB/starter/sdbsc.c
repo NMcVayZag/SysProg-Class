@@ -75,7 +75,7 @@ int get_student(int fd, int id, student_t *s){
     //printf("advanced to %d\n", lseek_rc);// confirm the movement of lseek to corrct offset
 
     ssize_t bytes_read = read(fd, &mystudent, sizeof(mystudent)); // read the student record via pointer to mystudent
-    if ((bytes_read != STUDENT_RECORD_SIZE) & (mystudent.id == 0)){
+    if ((bytes_read != STUDENT_RECORD_SIZE) || (mystudent.id == 0)){
         printf(M_STD_NOT_FND_MSG, id);
         return SRCH_NOT_FOUND;
     }
@@ -113,7 +113,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
     off_t myoffset;
 
     mystudent.id = id;
-    mystudent.gpa = (int)(gpa * 100);
+    mystudent.gpa = gpa;
 
     // (destination, source, how many to take) we will only take 24! which is safe
     strncpy(mystudent.fname, fname, sizeof(mystudent.fname));
