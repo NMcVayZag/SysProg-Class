@@ -50,7 +50,7 @@ int open_db(char *dbFile, bool should_truncate)
 /*
  *  get_student
  *      fd:  linux file descriptor
- *      id:  the student id we are looking forname of the
+ *      id:  the student id we are looking for name of the
  *      *s:  a pointer where the located (if found) student data will be
  *           copied
  *
@@ -60,10 +60,27 @@ int open_db(char *dbFile, bool should_truncate)
  *
  *  console:  Does not produce any console I/O used by other functions
  */
-int get_student(int fd, int id, student_t *s)
-{
-    // TODO
-    return NOT_IMPLEMENTED_YET;
+int get_student(int fd, int id, student_t *s){   
+    
+    student_t mystudent ={0}; //todo new up a student record 
+    off_t myoffset;
+
+    myoffset = id * STUDENT_RECORD_SIZE;
+
+    int lseek_rc = lseek(fd, myoffset, SEEK_SET);  // Seek_set starts us at the beginning of the file(0) to the student offset which
+    if ((lseek_rc <0)||(lseek_rc < STUDENT_RECORD_SIZE)){ // is (4*64)
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+    //printf("advanced to %d\n", lseek_rc);// confirm the movement of lseek to corrct offset
+
+    ssize_t bytes_read = read(fd, &mystudent, sizeof(mystudent)); // read the student record via pointer to mystudent
+    if ((bytes_read != STUDENT_RECORD_SIZE) & (mystudent.id == 0)){
+        printf(M_STD_NOT_FND_MSG, id);
+        return SRCH_NOT_FOUND;
+    }
+    *s = mystudent;
+    return NO_ERROR;
 }
 
 /*
@@ -91,11 +108,48 @@ int get_student(int fd, int id, student_t *s)
  *            M_ERR_DB_WRITE    error writing to db file (adding student)
  *
  */
-int add_student(int fd, int id, char *fname, char *lname, int gpa)
-{
-    // TODO
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+int add_student(int fd, int id, char *fname, char *lname, int gpa){
+    student_t mystudent ={0}; //todo new up a student record 
+    off_t myoffset;
+
+    mystudent.id = id;
+    mystudent.gpa = (int)(gpa * 100);
+
+    // (destination, source, how many to take) we will only take 24! which is safe
+    strncpy(mystudent.fname, fname, sizeof(mystudent.fname));
+    strncpy(mystudent.lname, lname, sizeof(mystudent.lname));
+    //get names - the fname is 24 last name is 32bytes
+
+    // what offset should this student should be stored at?
+    // student id * the size of the student(64) to find where to write the record - known as the OFFSET
+
+    myoffset = id * STUDENT_RECORD_SIZE;
+
+    // write the record to the db file - the file description for the db is in arg "fd"
+
+    int lseek_rc = lseek(fd, myoffset, SEEK_SET);  // Seek_set starts us at the beginning of the file(0) to the student offset which
+    if ((lseek_rc <0)||(lseek_rc < STUDENT_RECORD_SIZE)){ // is (4*64)
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+
+    ssize_t bytes_read = read(fd, &mystudent, sizeof(mystudent)); // read the student record from the db file via pointer to mystudent, with the size of the student struct
+    if (bytes_read == STUDENT_RECORD_SIZE){
+        if (mystudent.id != 0 ){        // if the student id is 0 then we have a duplicate
+            printf(M_ERR_DB_ADD_DUP, id);
+            return ERR_DB_OP;
+        }
+    }
+    size_t bytes_written = write (fd, &mystudent, sizeof(mystudent)); // write the student record to the db file via pointer to mystudent, with the size of the student struct
+    //writes as a byte stream!
+    if (bytes_written < (size_t)STUDENT_RECORD_SIZE){
+        printf(M_ERR_DB_WRITE);
+        return ERR_DB_FILE;
+    } // determine if the write was a success and print the correct message(s), return the correct code
+
+    printf(M_STD_ADDED, id); // Student was added successfully
+
+    return NO_ERROR;
 }
 
 /*
@@ -122,9 +176,41 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa)
  */
 int del_student(int fd, int id)
 {
+    off_t myoffset = id * sizeof(student_t); //calculate the offset of the student record in the file
+    
+
+    int lseek_rc = lseek(fd, myoffset, SEEK_SET);  // Seek_set starts us at the beginning of the file(0) to the student offset which
+    if ((lseek_rc <0)||(lseek_rc < STUDENT_RECORD_SIZE)){ // is (4*64)
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+    student_t empty_student = {0};  // This creates a struct filled with zeros
+
+    student_t mystudent = {0}; // create student for checking record
+    ssize_t bytes_read = read(fd, &mystudent, STUDENT_RECORD_SIZE); // Read the student record into mystudent
+    if (bytes_read != STUDENT_RECORD_SIZE){
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }else{
+        if (mystudent.id == 0){// check if student exists in record
+            printf(M_STD_NOT_FND_MSG, id);
+            return SRCH_NOT_FOUND;
+        }
+    }
+    int lseek_rc_2 = lseek(fd, myoffset, SEEK_SET);  // Move it back to that offset
+    if ((lseek_rc_2 <0)||(lseek_rc_2 < STUDENT_RECORD_SIZE)){
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+    // Write the empty student data (zeros) to overwrite the record
+    ssize_t bytes_written = write(fd, &empty_student, sizeof(student_t));
+    if (bytes_written != sizeof(student_t)) {
+        printf(M_ERR_DB_WRITE);
+        return ERR_DB_FILE;
+    }
     // TODO
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+    printf(M_STD_DEL_MSG, id);
+    return NO_ERROR;
 }
 
 /*
@@ -152,10 +238,38 @@ int del_student(int fd, int id)
  *
  */
 int count_db_records(int fd)
-{
-    // TODO
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+{ int records = 0;
+  int id= 1;
+    while(1){
+        student_t mystudent = {0};
+        off_t myoffset = id * sizeof(student_t);
+
+        int lseek_rc = lseek(fd, myoffset, SEEK_SET);  // Seek_set starts us at the beginning of the file(0) to the student offset which
+        if ((lseek_rc <0)||(lseek_rc < STUDENT_RECORD_SIZE)){ // is (4*64)
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+        ssize_t bytes_read = read(fd, &mystudent, sizeof(mystudent));
+
+        if (bytes_read == 0){
+            break;
+        }
+        if (bytes_read != STUDENT_RECORD_SIZE){
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+        if (mystudent.id != 0){
+            records++;
+        }
+        id++;
+    }
+    if (records == 0){
+        printf(M_DB_EMPTY);
+        return records;
+        }else{
+            printf(M_DB_RECORD_CNT, records);
+            return records;
+        }
 }
 
 /*
@@ -191,11 +305,40 @@ int count_db_records(int fd)
  *            M_ERR_DB_READ    error reading or seeking the database file
  *
  */
-int print_db(int fd)
-{
-    // TODO
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+int print_db(int fd){
+    int id= 1;
+    bool first_record = true;
+    
+
+    while(1){
+        student_t mystudent = {0};
+        off_t myoffset = id * sizeof(student_t);
+        int lseek_rc = lseek(fd, myoffset, SEEK_SET);  // Seek_set starts us at the beginning of the file(0) to the student offset which
+        if ((lseek_rc <0)||(lseek_rc < STUDENT_RECORD_SIZE)){ 
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+        ssize_t bytes_read = read(fd, &mystudent, sizeof(mystudent));
+        if (bytes_read == 0){//EOF catch
+            break;
+        }
+        if (bytes_read != STUDENT_RECORD_SIZE){ // catch reading error
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+        if (mystudent.id != 0){ // check if there is a student in the file
+            if (first_record){
+                printf(STUDENT_PRINT_HDR_STRING, "ID","FIRST NAME", "LAST_NAME", "GPA");
+                first_record = false;
+            }
+            printf(STUDENT_PRINT_FMT_STRING, mystudent.id, mystudent.fname, mystudent.lname, mystudent.gpa/100.0);
+        }
+        id++;
+    }
+    if (first_record){
+        printf(M_DB_EMPTY);
+    }
+    return NO_ERROR;
 }
 
 /*
@@ -226,10 +369,15 @@ int print_db(int fd)
  *                             s->id is zero
  *
  */
-void print_student(student_t *s)
-{
-    // TODO
-    printf(M_NOT_IMPL);
+void print_student(student_t *s){
+    if (s == NULL || s->id == 0) {
+        printf(M_ERR_STD_PRINT);
+        return;
+    }
+        float gpa = s->gpa / 100.0; // Convert GPA to float
+
+    printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST NAME", "GPA");
+    printf(STUDENT_PRINT_FMT_STRING, s->id, s->fname, s->lname, gpa);
 }
 
 /*
